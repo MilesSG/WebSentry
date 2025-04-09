@@ -1,6 +1,6 @@
 # 🛡️ SecureScout - 全功能Web安全检测平台
 
-![系统运行截图](SecureScout/frontend/imgs/image.png)
+![系统运行截图](./frontend/imgs/image.png)
 
 <div align="center">
   
