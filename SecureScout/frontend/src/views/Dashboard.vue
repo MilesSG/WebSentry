@@ -128,6 +128,75 @@
           <div class="h-40 w-full">
             <canvas ref="vulnerabilityChart"></canvas>
           </div>
+          
+          <!-- 漏洞类型详细分析 -->
+          <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div v-if="hasVulnType('sql_injection')" class="border border-gray-200 rounded-md p-3">
+              <div class="flex justify-between items-center mb-2">
+                <h4 class="font-medium text-gray-800">SQL注入漏洞</h4>
+                <el-tag type="danger" size="small">{{ getVulnTypeCount('sql_injection') }}</el-tag>
+              </div>
+              <p class="text-xs text-gray-600 mb-2">SQL注入漏洞允许攻击者将恶意SQL查询注入应用程序，可能导致数据泄露或损坏。</p>
+              <router-link 
+                v-if="getVulnTypeCount('sql_injection') > 0" 
+                to="/reports?filter=sql_injection" 
+                class="text-xs text-blue-500 hover:underline"
+              >
+                查看详情
+              </router-link>
+            </div>
+            
+            <div v-if="hasVulnType('xss')" class="border border-gray-200 rounded-md p-3">
+              <div class="flex justify-between items-center mb-2">
+                <h4 class="font-medium text-gray-800">XSS跨站脚本漏洞</h4>
+                <el-tag type="warning" size="small">{{ getVulnTypeCount('xss') }}</el-tag>
+              </div>
+              <p class="text-xs text-gray-600 mb-2">XSS漏洞允许攻击者将恶意JavaScript代码注入网页，在用户浏览器中执行，可能导致会话劫持等。</p>
+              <router-link 
+                v-if="getVulnTypeCount('xss') > 0" 
+                to="/reports?filter=xss" 
+                class="text-xs text-blue-500 hover:underline"
+              >
+                查看详情
+              </router-link>
+            </div>
+            
+            <div v-if="hasVulnType('csrf') || hasVulnType('file_upload')" class="border border-gray-200 rounded-md p-3">
+              <div class="flex justify-between items-center mb-2">
+                <h4 class="font-medium text-gray-800">其他类型漏洞</h4>
+                <el-tag type="info" size="small">{{ getVulnTypeCount('csrf') + getVulnTypeCount('file_upload') }}</el-tag>
+              </div>
+              <p class="text-xs text-gray-600 mb-2">包括CSRF跨站请求伪造、不安全的文件上传等漏洞类型。</p>
+              <router-link 
+                v-if="getVulnTypeCount('csrf') + getVulnTypeCount('file_upload') > 0" 
+                to="/reports?filter=other" 
+                class="text-xs text-blue-500 hover:underline"
+              >
+                查看详情
+              </router-link>
+            </div>
+            
+            <div class="border border-gray-200 rounded-md p-3 bg-gray-50">
+              <div class="flex justify-between items-center mb-2">
+                <h4 class="font-medium text-gray-800">漏洞趋势分析</h4>
+                <el-tag type="success" size="small" v-if="vulnerabilityTrend < 0">下降</el-tag>
+                <el-tag type="danger" size="small" v-else-if="vulnerabilityTrend > 0">上升</el-tag>
+                <el-tag type="info" size="small" v-else>稳定</el-tag>
+              </div>
+              <div class="flex items-end h-16 space-x-1 mb-1">
+                <div 
+                  v-for="(count, index) in vulnerabilityHistory" 
+                  :key="index"
+                  class="bg-blue-500 rounded-sm flex-1"
+                  :style="{ 
+                    height: `${count > 0 ? (count / Math.max(...vulnerabilityHistory) * 100) : 0}%`, 
+                    opacity: 0.3 + (index / vulnerabilityHistory.length) * 0.7 
+                  }"
+                ></div>
+              </div>
+              <div class="text-xs text-gray-500 text-center">过去7天漏洞趋势</div>
+            </div>
+          </div>
         </div>
         <div v-else class="flex flex-col items-center justify-center py-8 bg-gray-50 rounded-lg">
           <el-icon :size="36" class="text-gray-400 mb-2"><CircleCheckFilled /></el-icon>
@@ -363,6 +432,17 @@ const typeColors = [
 
 // 扫描日历数据（模拟）
 const scanCalendar = ref(generateCalendarData())
+
+// 漏洞历史趋势（模拟数据）
+const vulnerabilityHistory = ref([2, 5, 8, 6, 7, 5, 4])
+
+// 漏洞趋势，正数表示上升，负数表示下降，0表示稳定
+const vulnerabilityTrend = computed(() => {
+  if (vulnerabilityHistory.value.length < 2) return 0
+  const lastValue = vulnerabilityHistory.value[vulnerabilityHistory.value.length - 1]
+  const prevValue = vulnerabilityHistory.value[vulnerabilityHistory.value.length - 2]
+  return lastValue - prevValue
+})
 
 // 计算属性
 const activeScansCount = computed(() => {
@@ -752,6 +832,30 @@ onMounted(() => {
     }
   })
 })
+
+// 检查是否有特定类型的漏洞
+function hasVulnType(type) {
+  const index = vulnerabilityTypes.value.findIndex(item => {
+    return (type === 'sql_injection' && item.name === 'SQL注入') ||
+           (type === 'xss' && item.name === 'XSS') ||
+           (type === 'csrf' && item.name === 'CSRF') ||
+           (type === 'file_upload' && item.name === '文件上传')
+  })
+  
+  return index >= 0 && vulnerabilityTypes.value[index].count > 0
+}
+
+// 获取特定类型漏洞的数量
+function getVulnTypeCount(type) {
+  const index = vulnerabilityTypes.value.findIndex(item => {
+    return (type === 'sql_injection' && item.name === 'SQL注入') ||
+           (type === 'xss' && item.name === 'XSS') ||
+           (type === 'csrf' && item.name === 'CSRF') ||
+           (type === 'file_upload' && item.name === '文件上传')
+  })
+  
+  return index >= 0 ? vulnerabilityTypes.value[index].count : 0
+}
 </script>
 
 <style scoped>

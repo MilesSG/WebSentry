@@ -14,10 +14,9 @@
     "patterns": [
       "<script>",
       "javascript:",
-      "onerror=",
-      "onload="
+      "onerror="
     ],
-    "description": "\u8de8\u7ad9\u811a\u672c\u6f0f\u6d1e\u5141\u8bb8\u653b\u51fb\u8005\u6ce8\u5165\u5ba2\u6237\u7aef\u811a\u672c",
+    "description": "\u8de8\u7ad9\u811a\u672c\u6f0f\u6d1e\u5141\u8bb8\u653b\u51fb\u8005\u6ce8\u5165\u5ba2\u6237\u7aef\u811a\u672c11",
     "severity": "\u9ad8"
   },
   "csrf": {

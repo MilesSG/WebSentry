@@ -76,65 +76,63 @@
         </div>
       </div>
       
-      <!-- 漏洞列表 -->
-      <div class="card mb-6">
-        <h3 class="text-lg font-medium text-gray-900 mb-4">漏洞详情</h3>
-        
-        <div v-if="!report.vulnerabilities || report.vulnerabilities.length === 0" class="text-gray-500">
-          未发现漏洞
-        </div>
-        
-        <div v-else>
-          <div class="mb-4">
-            <el-input 
-              v-model="vulnSearchQuery" 
-              placeholder="搜索漏洞..." 
-              clearable
-              class="w-full md:w-80"
-            />
-          </div>
+      <!-- 漏洞可视化分析模块 -->
+      <VulnerabilityVisualizer 
+        v-if="report.vulnerabilities && report.vulnerabilities.length > 0"
+        :vulnerabilities="report.vulnerabilities"
+        title="漏洞分析与可视化"
+        class="mb-6"
+      />
+      
+      <!-- 漏洞详情切换选项卡 -->
+      <div v-if="report.vulnerabilities && report.vulnerabilities.length > 0" class="card mb-6">
+        <el-tabs v-model="activeTab">
+          <el-tab-pane label="全部漏洞" name="all">
+            <VulnerabilityTable :vulnerabilities="report.vulnerabilities" @view-details="showVulnDetails" />
+          </el-tab-pane>
           
-          <div class="space-y-4">
-            <div 
-              v-for="(vuln, index) in filteredVulnerabilities" 
-              :key="index" 
-              class="border border-gray-200 rounded-md overflow-hidden"
-            >
-              <div class="flex justify-between items-center bg-gray-50 px-4 py-3">
-                <div class="font-medium">{{ getVulnTypeName(vuln.type) }}</div>
-                <VulnerabilityBadge :severity="vuln.severity" />
-              </div>
-              
-              <div class="p-4">
-                <div class="mb-3">
-                  <div class="text-gray-700">{{ vuln.description }}</div>
-                </div>
-                
-                <div v-if="vuln.url" class="mb-3 text-sm">
-                  <div class="text-gray-500 mb-1">URL:</div>
-                  <div class="break-all">{{ vuln.url }}</div>
-                </div>
-                
-                <div v-if="vuln.test_url" class="mb-3 text-sm">
-                  <div class="text-gray-500 mb-1">测试URL:</div>
-                  <div class="break-all">{{ vuln.test_url }}</div>
-                </div>
-                
-                <div v-if="vuln.details" class="text-sm">
-                  <div class="text-gray-500 mb-1">详细信息:</div>
-                  <pre class="bg-gray-50 p-2 rounded whitespace-pre-wrap">{{ vuln.details }}</pre>
-                </div>
-              </div>
-              
-              <div class="bg-gray-50 px-4 py-3">
-                <h4 class="font-medium mb-2">修复建议</h4>
-                <div class="text-sm text-gray-700">
-                  {{ getRemediationAdvice(vuln.type) }}
-                </div>
-              </div>
+          <el-tab-pane 
+            v-if="hasVulnType('sql_injection')" 
+            label="SQL注入漏洞" 
+            name="sql_injection"
+          >
+            <div class="mb-4">
+              <SQLInjectionGuidance />
             </div>
-          </div>
-        </div>
+            <VulnerabilityTable 
+              :vulnerabilities="getVulnerabilitiesByType('sql_injection')" 
+              @view-details="showVulnDetails"
+            />
+          </el-tab-pane>
+          
+          <el-tab-pane 
+            v-if="hasVulnType('xss')" 
+            label="XSS漏洞" 
+            name="xss"
+          >
+            <div class="mb-4">
+              <XSSGuidance />
+            </div>
+            <VulnerabilityTable 
+              :vulnerabilities="getVulnerabilitiesByType('xss')" 
+              @view-details="showVulnDetails"
+            />
+          </el-tab-pane>
+          
+          <el-tab-pane 
+            v-if="hasVulnType('csrf') || hasVulnType('file_upload')" 
+            label="其他漏洞" 
+            name="other"
+          >
+            <div class="mb-4">
+              <OtherVulnerabilitiesGuidance />
+            </div>
+            <VulnerabilityTable 
+              :vulnerabilities="getOtherVulnerabilities()" 
+              @view-details="showVulnDetails"
+            />
+          </el-tab-pane>
+        </el-tabs>
       </div>
       
       <!-- 操作按钮 -->
@@ -150,6 +148,62 @@
         
         <el-button type="primary" @click="exportReport">导出报告</el-button>
       </div>
+      
+      <!-- 漏洞详情对话框 -->
+      <el-dialog
+        v-model="showDetailDialog"
+        title="漏洞详情"
+        width="70%"
+        destroy-on-close
+      >
+        <template v-if="selectedVulnerability">
+          <div class="vuln-detail">
+            <div class="bg-gray-50 p-4 rounded-lg mb-4">
+              <div class="flex justify-between items-center mb-2">
+                <h3 class="text-lg font-medium">{{ getVulnTypeName(selectedVulnerability.type) }}</h3>
+                <VulnerabilityBadge :severity="selectedVulnerability.severity" />
+              </div>
+              <p>{{ selectedVulnerability.description }}</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div v-if="selectedVulnerability.url">
+                <div class="text-sm text-gray-500 mb-1">URL:</div>
+                <div class="break-all">{{ selectedVulnerability.url }}</div>
+              </div>
+              
+              <div v-if="selectedVulnerability.test_url">
+                <div class="text-sm text-gray-500 mb-1">测试URL:</div>
+                <div class="break-all">{{ selectedVulnerability.test_url }}</div>
+              </div>
+            </div>
+            
+            <div v-if="selectedVulnerability.details" class="mb-4">
+              <div class="text-sm text-gray-500 mb-1">详细信息:</div>
+              <div class="bg-gray-50 p-3 rounded font-mono text-sm overflow-auto max-h-40">
+                {{ selectedVulnerability.details }}
+              </div>
+            </div>
+            
+            <el-divider>修复建议</el-divider>
+            
+            <div v-if="selectedVulnerability.type === 'sql_injection'">
+              <SQLInjectionGuidance />
+            </div>
+            <div v-else-if="selectedVulnerability.type === 'xss'">
+              <XSSGuidance />
+            </div>
+            <div v-else-if="selectedVulnerability.type === 'csrf' || selectedVulnerability.type === 'file_upload'">
+              <OtherVulnerabilitiesGuidance />
+            </div>
+            <div v-else>
+              <div class="text-sm">
+                {{ getRemediationAdvice(selectedVulnerability.type) }}
+              </div>
+            </div>
+          </div>
+        </template>
+      </el-dialog>
     </template>
   </div>
 </template>
@@ -162,6 +216,11 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 import { useScanStore } from '../store/scanStore'
 import ScanStatusBadge from '../components/ScanStatusBadge.vue'
 import VulnerabilityBadge from '../components/VulnerabilityBadge.vue'
+import VulnerabilityVisualizer from '../components/VulnerabilityVisualizer.vue'
+import VulnerabilityTable from '../components/VulnerabilityTable.vue'
+import SQLInjectionGuidance from '../components/guidance/SQLInjectionGuidance.vue'
+import XSSGuidance from '../components/guidance/XSSGuidance.vue'
+import OtherVulnerabilitiesGuidance from '../components/guidance/OtherVulnerabilitiesGuidance.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -175,6 +234,9 @@ const report = ref(null)
 const isLoading = ref(true)
 const error = ref(null)
 const vulnSearchQuery = ref('')
+const activeTab = ref('all')
+const showDetailDialog = ref(false)
+const selectedVulnerability = ref(null)
 
 // 模块名称映射
 const moduleNames = {
@@ -220,24 +282,6 @@ const vulnerabilitiesBySeverity = computed(() => {
   return result
 })
 
-// 搜索过滤后的漏洞
-const filteredVulnerabilities = computed(() => {
-  if (!report.value?.vulnerabilities) return []
-  
-  if (!vulnSearchQuery.value) {
-    return report.value.vulnerabilities
-  }
-  
-  const query = vulnSearchQuery.value.toLowerCase()
-  return report.value.vulnerabilities.filter(vuln => {
-    return (
-      (vuln.type && vuln.type.toLowerCase().includes(query)) ||
-      (vuln.description && vuln.description.toLowerCase().includes(query)) ||
-      (vuln.details && vuln.details.toLowerCase().includes(query))
-    )
-  })
-})
-
 // 获取模块名称
 function getModuleName(moduleId) {
   return moduleNames[moduleId] || moduleId
@@ -250,44 +294,67 @@ function getVulnTypeName(type) {
 
 // 获取修复建议
 function getRemediationAdvice(type) {
-  return remediationAdvice[type] || '请咨询安全专家以获取针对此类型漏洞的具体修复建议。'
+  return remediationAdvice[type] || '请参考安全最佳实践进行修复。'
+}
+
+// 检查是否有特定类型的漏洞
+function hasVulnType(type) {
+  if (!report.value?.vulnerabilities) return false
+  return report.value.vulnerabilities.some(vuln => vuln.type === type)
+}
+
+// 获取指定类型的漏洞
+function getVulnerabilitiesByType(type) {
+  if (!report.value?.vulnerabilities) return []
+  return report.value.vulnerabilities.filter(vuln => vuln.type === type)
+}
+
+// 获取其他类型漏洞
+function getOtherVulnerabilities() {
+  if (!report.value?.vulnerabilities) return []
+  return report.value.vulnerabilities.filter(vuln => 
+    vuln.type === 'csrf' || vuln.type === 'file_upload'
+  )
+}
+
+// 显示漏洞详情
+function showVulnDetails(vuln) {
+  selectedVulnerability.value = vuln
+  showDetailDialog.value = true
 }
 
 // 格式化日期
-function formatDate(dateString) {
-  if (!dateString) return ''
-  const date = new Date(dateString)
-  return date.toLocaleString('zh-CN', {
+function formatDate(dateStr) {
+  if (!dateStr) return '未知'
+  const date = new Date(dateStr)
+  return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit'
-  })
+    second: '2-digit',
+  }).format(date)
 }
 
-// 计算扫描持续时间
-function calculateDuration(startTime, endTime) {
-  if (!startTime || !endTime) return ''
+// 计算持续时间
+function calculateDuration(startStr, endStr) {
+  if (!startStr || !endStr) return '--'
   
-  const start = new Date(startTime)
-  const end = new Date(endTime)
-  const durationMs = end - start
+  const start = new Date(startStr)
+  const end = new Date(endStr)
+  const diffMs = end - start
   
-  if (durationMs < 0) return '无效时间'
+  const diffSec = Math.floor(diffMs / 1000)
+  if (diffSec < 60) return `${diffSec}秒`
   
-  // 转换为可读格式
-  const seconds = Math.floor(durationMs / 1000) % 60
-  const minutes = Math.floor(durationMs / (1000 * 60)) % 60
-  const hours = Math.floor(durationMs / (1000 * 60 * 60))
+  const diffMin = Math.floor(diffSec / 60)
+  const remainSec = diffSec % 60
+  if (diffMin < 60) return `${diffMin}分${remainSec}秒`
   
-  let result = ''
-  if (hours > 0) result += `${hours}小时 `
-  if (minutes > 0) result += `${minutes}分钟 `
-  result += `${seconds}秒`
-  
-  return result
+  const diffHour = Math.floor(diffMin / 60)
+  const remainMin = diffMin % 60
+  return `${diffHour}小时${remainMin}分`
 }
 
 // 删除报告
@@ -297,8 +364,7 @@ async function deleteReport() {
     ElMessage.success('报告已删除')
     router.push('/reports')
   } catch (err) {
-    ElMessage.error('删除报告失败')
-    console.error('删除报告失败:', err)
+    ElMessage.error('删除报告失败: ' + (err.message || '未知错误'))
   }
 }
 
@@ -306,93 +372,82 @@ async function deleteReport() {
 function exportReport() {
   if (!report.value) return
   
-  try {
-    // 创建报告内容
-    const reportContent = {
-      url: report.value.url,
-      scan_id: report.value.id,
-      status: report.value.status,
-      start_time: report.value.start_time,
-      end_time: report.value.end_time,
-      vulnerabilities: report.value.vulnerabilities || []
-    }
-    
-    // 转换为JSON字符串
-    const jsonString = JSON.stringify(reportContent, null, 2)
-    
-    // 创建Blob
-    const blob = new Blob([jsonString], { type: 'application/json' })
-    
-    // 创建下载链接
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    
-    // 设置文件名 (URL的域名部分 + 日期)
-    let fileName = 'security_report'
-    try {
-      if (report.value.url) {
-        const urlObj = new URL(report.value.url)
-        fileName = urlObj.hostname
-      }
-    } catch (e) {}
-    
-    // 添加日期时间戳
-    const date = new Date()
-    const timestamp = date.toISOString().replace(/[:.]/g, '-').substring(0, 19)
-    
-    a.download = `${fileName}_${timestamp}.json`
-    
-    // 点击下载
-    document.body.appendChild(a)
-    a.click()
-    
-    // 清理
+  // 创建报告内容
+  const reportContent = {
+    id: report.value.id,
+    url: report.value.url,
+    scanDate: report.value.start_time,
+    status: report.value.status,
+    modules: report.value.modules,
+    vulnerabilities: report.value.vulnerabilities
+  }
+  
+  // 转换为JSON
+  const jsonStr = JSON.stringify(reportContent, null, 2)
+  
+  // 创建Blob对象
+  const blob = new Blob([jsonStr], { type: 'application/json' })
+  
+  // 创建下载链接
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `security-report-${report.value.id}.json`
+  
+  // 触发下载
+  document.body.appendChild(a)
+  a.click()
+  
+  // 清理
+  setTimeout(() => {
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-    
-    ElMessage.success('报告已导出')
-  } catch (err) {
-    ElMessage.error('导出报告失败')
-    console.error('导出报告失败:', err)
-  }
+  }, 0)
+  
+  ElMessage.success('报告已导出')
 }
 
 // 加载报告数据
-async function loadReportData() {
-  isLoading.value = true
-  error.value = null
-  
+async function loadReport() {
   try {
-    // 尝试从 store 中获取扫描结果
-    if (scanStore.scanResults?.length) {
-      const foundReport = scanStore.scanResults.find(r => r.id === reportId.value)
-      if (foundReport) {
-        report.value = foundReport
-        return
-      }
-    }
+    isLoading.value = true
+    error.value = null
     
-    // 如果 store 中没有，则从 API 获取
-    const data = await scanStore.getScanStatus(reportId.value)
-    report.value = data
+    // 模拟实际API调用 - 在真实环境中将使用scanStore.getReport(reportId.value)
+    const result = await scanStore.getAllResults()
+    const foundReport = result.find(r => r.id === reportId.value)
+    
+    if (foundReport) {
+      report.value = foundReport
+    } else {
+      error.value = '未找到指定报告'
+    }
   } catch (err) {
-    error.value = err.message || '加载报告失败'
+    error.value = '加载报告失败: ' + (err.message || '未知错误')
     console.error('加载报告失败:', err)
   } finally {
     isLoading.value = false
   }
 }
 
-// 监听路由参数变化，重新加载数据
-watch(() => route.params.id, (newId, oldId) => {
-  if (newId !== oldId) {
-    loadReportData()
-  }
+// 初始加载
+onMounted(() => {
+  loadReport()
 })
 
-// 生命周期钩子
-onMounted(() => {
-  loadReportData()
-})
-</script> 
+// 监听路由变化，重新加载数据
+watch(
+  () => route.params.id,
+  () => {
+    if (route.name === 'report-detail') {
+      loadReport()
+    }
+  }
+)
+</script>
+
+<style scoped>
+.card {
+  @apply bg-white rounded-lg shadow-md p-6;
+}
+</style> 

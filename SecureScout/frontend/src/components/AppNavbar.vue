@@ -88,6 +88,7 @@ const isMobileMenuOpen = ref(false)
 const navItems = [
   { title: '仪表盘', path: '/' },
   { title: '扫描中心', path: '/scan' },
+  { title: '功能演示', path: '/demo' },
   { title: '报告', path: '/reports' },
   { title: '设置', path: '/settings' }
 ]

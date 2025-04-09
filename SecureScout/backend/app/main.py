@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import os
@@ -9,6 +9,9 @@ app = FastAPI(
     description="Web安全检测工具API",
     version="1.0.0"
 )
+
+# 创建API路由器，添加/api前缀
+api_router = APIRouter(prefix="/api")
 
 # 配置CORS
 app.add_middleware(
@@ -69,17 +72,20 @@ def init_data_files():
         with open(vulns_file, "w") as f:
             json.dump(default_vulns, f, indent=2)
 
-@app.on_event("startup")
-async def startup_event():
-    init_data_files()
-
-@app.get("/")
-async def root():
-    return {"message": "欢迎使用SecureScout Web安全检测工具"}
+# 初始化数据文件
+init_data_files()
 
 # 在这里导入和包含API路由
 from app.api import scan, report, config
 
-app.include_router(scan.router)
-app.include_router(report.router)
-app.include_router(config.router) 
+# 将子路由挂载到API路由器
+api_router.include_router(scan.router)
+api_router.include_router(report.router)
+api_router.include_router(config.router)
+
+# 将API路由器挂载到主应用
+app.include_router(api_router)
+
+@app.get("/")
+async def root():
+    return {"message": "欢迎使用SecureScout Web安全检测工具"} 
