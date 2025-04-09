@@ -55,10 +55,9 @@ SecureScout是一款功能强大的Web安全检测工具，提供美观的浅色
 
 ### 📥 安装步骤
 
-1. **克隆项目仓库**
+1. **进入项目仓库**
 
 ```bash
-git clone https://github.com/yourusername/SecureScout.git
 cd SecureScout
 ```
 
