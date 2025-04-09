@@ -1,0 +1,36 @@
+{
+  "name": "secure-scout",
+  "version": "1.0.0",
+  "description": "Web安全检测工具前端",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "security",
+    "web",
+    "scanner",
+    "vue"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "chart.js": "^4.4.0",
+    "echarts": "^5.6.0",
+    "element-plus": "^2.4.2",
+    "pinia": "^2.1.7",
+    "vue": "^3.3.8",
+    "vue-chartjs": "^5.2.0",
+    "vue-router": "^4.2.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.5.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.3.5",
+    "vite": "^5.0.0"
+  }
+}
