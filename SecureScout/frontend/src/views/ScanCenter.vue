@@ -578,10 +578,10 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="scanReportDialogVisible = false">关闭</el-button>
-          <el-button type="primary" @click="exportReport('pdf')">导出PDF</el-button>
+          <el-button type="primary" @click="generatePDF">生成PDF</el-button>
           <el-dropdown @command="exportReport" trigger="click">
             <el-button type="primary">
-              更多格式 <el-icon class="el-icon--right"><arrow-down /></el-icon>
+              更多格式 <el-icon class="ml-1"><ArrowDown /></el-icon>
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
@@ -596,18 +596,61 @@
         </span>
       </template>
     </el-dialog>
+    
+    <!-- PDF模板 (隐藏) -->
+    <div v-show="false" ref="pdfContainer" class="pdf-container">
+      <div id="report-pdf-template" class="pdf-template">
+        <div class="report-header">
+          <h1>Web安全扫描报告</h1>
+          <div class="report-meta">
+            <p><strong>报告ID:</strong> {{ currentReportScanId }}</p>
+            <p><strong>目标URL:</strong> {{ currentScanDetails?.url }}</p>
+            <p><strong>扫描时间:</strong> {{ formatDateTime(currentScanDetails?.start_time) }}</p>
+            <p><strong>扫描状态:</strong> {{ currentScanDetails?.status === 'completed' ? '已完成' : currentScanDetails?.status }}</p>
+          </div>
+        </div>
+
+        <div class="vulnerability-summary">
+          <h2>漏洞统计</h2>
+          <p>发现漏洞总数: {{ currentScanVulnerabilities?.length || 0 }}</p>
+        </div>
+
+        <div v-if="currentScanVulnerabilities?.length > 0" class="vulnerability-details">
+          <h2>漏洞详情</h2>
+          <div v-for="(vuln, index) in currentScanVulnerabilities" :key="index" class="vulnerability-item">
+            <h3>{{ index + 1 }}. {{ vuln.type }} ({{ vuln.severity }})</h3>
+            <p v-if="vuln.location"><strong>URL:</strong> {{ vuln.location }}</p>
+            <p v-if="vuln.description"><strong>描述:</strong> {{ vuln.description }}</p>
+          </div>
+        </div>
+
+        <div class="remediation-advice">
+          <h2>安全建议</h2>
+          <div v-if="currentScanVulnerabilities?.length > 0">
+            <div v-for="vuln in currentScanVulnerabilities" :key="vuln.id" class="advice-item">
+              <h3>{{ vuln.type }}修复建议:</h3>
+              <p>{{ vuln.solution }}</p>
+            </div>
+          </div>
+          <div v-else>
+            <p>未发现安全漏洞，建议继续保持良好的安全实践。</p>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Plus, 
   Refresh, 
   Search,
-  Delete
+  Delete,
+  ArrowDown
 } from '@element-plus/icons-vue'
 import ScanStatusBadge from '@/components/ScanStatusBadge.vue'
 import { scanApi } from '@/api'
@@ -636,6 +679,9 @@ const currentReportScanId = ref('')
 // 扫描详情数据
 const currentScanDetails = ref(null)
 const currentScanVulnerabilities = ref([])
+
+// PDF生成相关
+const pdfContainer = ref(null)
 
 // 获取所有扫描
 async function fetchScans() {
@@ -1041,6 +1087,122 @@ function emailReport(email) {
   }
 }
 
+// 生成PDF
+async function generatePDF() {
+  try {
+    ElMessage.info('正在准备打印PDF报告，请稍候...')
+    
+    // 使用浏览器原生打印功能
+    const printWindow = window.open('', '_blank')
+    
+    if (!printWindow) {
+      throw new Error('请允许浏览器打开弹窗以生成PDF')
+    }
+    
+    // 获取PDF模板元素
+    const element = pdfContainer.value.querySelector('#report-pdf-template')
+    if (!element) {
+      throw new Error('无法找到PDF模板元素')
+    }
+    
+    // 设置打印窗口内容
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>安全扫描报告 - ${currentReportScanId.value}</title>
+        <style>
+          body {
+            font-family: 'SimSun', 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: white;
+          }
+          .report-header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+          }
+          .report-header h1 {
+            font-size: 24px;
+            margin-bottom: 15px;
+          }
+          .report-meta {
+            text-align: left;
+          }
+          .report-meta p {
+            margin: 5px 0;
+          }
+          h2 {
+            font-size: 18px;
+            margin-top: 25px;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+          }
+          h3 {
+            font-size: 16px;
+            margin-top: 15px;
+            margin-bottom: 10px;
+          }
+          .vulnerability-item {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+          }
+          .vulnerability-item h3 {
+            margin-top: 0;
+          }
+          .advice-item {
+            margin-bottom: 15px;
+          }
+          ul {
+            padding-left: 20px;
+          }
+          li {
+            margin-bottom: 5px;
+          }
+          @media print {
+            body {
+              padding: 0;
+            }
+            .print-controls {
+              display: none !important;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="print-controls" style="margin-bottom: 20px; text-align: center;">
+          <button onclick="window.print()" style="padding: 8px 16px; background-color: #409EFF; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">打印PDF</button>
+          <button onclick="window.close()" style="padding: 8px 16px; background-color: #F56C6C; color: white; border: none; border-radius: 4px; cursor: pointer;">关闭窗口</button>
+        </div>
+        ${element.outerHTML}
+      </body>
+      </html>
+    `)
+    
+    printWindow.document.close()
+    
+    // 自动触发打印
+    setTimeout(() => {
+      try {
+        printWindow.focus() // 确保窗口获得焦点
+        printWindow.print() // 直接打开打印对话框
+      } catch (e) {
+        console.error('自动打印失败:', e)
+      }
+    }, 1000)
+    
+    ElMessage.success('PDF打印窗口已打开，请选择"保存为PDF"选项')
+  } catch (error) {
+    console.error('生成PDF时出错:', error)
+    ElMessage.error('生成PDF失败: ' + error.message)
+  }
+}
+
 onMounted(() => {
   fetchScans()
   
@@ -1096,5 +1258,62 @@ onMounted(() => {
 .scan-center {
   min-height: calc(100vh - 64px);
   background-color: #f5f7fa;
+}
+
+/* PDF容器样式 */
+.pdf-container {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 210mm; /* A4宽度 */
+  z-index: -1000;
+}
+
+.pdf-template {
+  font-family: 'SimSun', 'Arial', sans-serif;
+  background-color: white;
+  padding: 20px;
+  width: 210mm;
+}
+
+.report-header {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.report-header h1 {
+  font-size: 24px;
+  margin-bottom: 15px;
+}
+
+.report-meta {
+  text-align: left;
+}
+
+.report-meta p {
+  margin: 5px 0;
+}
+
+.vulnerability-details h2,
+.vulnerability-summary h2,
+.remediation-advice h2 {
+  font-size: 18px;
+  margin-top: 25px;
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #eee;
+}
+
+.vulnerability-item {
+  margin-bottom: 20px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 5px;
+}
+
+.advice-item {
+  margin-bottom: 15px;
 }
 </style> 

@@ -866,20 +866,151 @@ function initVulnerabilityChart() {
 }
 
 // 生成PDF格式报告
-function generatePdfReport() {
+async function generatePdfReport() {
   if (!selectedReport.value) return
   
-  ElMessage({
-    type: 'info',
-    message: '正在生成PDF报告，请稍候...'
-  })
-  
-  setTimeout(() => {
-    ElMessage({
-      type: 'success',
-      message: 'PDF报告已生成并开始下载'
-    })
-  }, 1500)
+  try {
+    ElMessage.info('正在准备打印PDF报告，请稍候...')
+    
+    // 使用浏览器原生打印功能
+    const printWindow = window.open('', '_blank')
+    
+    if (!printWindow) {
+      throw new Error('请允许浏览器打开弹窗以生成PDF')
+    }
+    
+    // 构建报告HTML
+    const reportHtml = `
+      <div class="pdf-template">
+        <div class="report-header">
+          <h1>Web安全扫描报告</h1>
+          <div class="report-meta">
+            <p><strong>报告ID:</strong> ${selectedReport.value.id}</p>
+            <p><strong>目标URL:</strong> ${selectedReport.value.url}</p>
+            <p><strong>扫描时间:</strong> ${formatDate(selectedReport.value.scanDate)}</p>
+            <p><strong>扫描状态:</strong> ${selectedReport.value.status}</p>
+            <p><strong>扫描深度:</strong> ${selectedReport.value.depth}</p>
+            <p><strong>扫描时长:</strong> ${selectedReport.value.duration}</p>
+          </div>
+        </div>
+
+        <div class="vulnerability-summary">
+          <h2>漏洞统计</h2>
+          <p>发现漏洞总数: ${selectedReport.value.vulnerabilities || 0}</p>
+        </div>
+
+        ${selectedReport.value.vulnerabilityDetails && selectedReport.value.vulnerabilityDetails.length > 0 
+          ? `<div class="vulnerability-details">
+              <h2>漏洞详情</h2>
+              ${selectedReport.value.vulnerabilityDetails.map((vuln, index) => `
+                <div class="vulnerability-item">
+                  <h3>${index + 1}. ${vuln.type} (${vuln.severity})</h3>
+                  <p><strong>位置:</strong> ${vuln.location}</p>
+                  <p><strong>描述:</strong> ${vuln.description}</p>
+                  <p><strong>影响:</strong> ${vuln.impact}</p>
+                  <p><strong>证据:</strong> ${vuln.evidence}</p>
+                  <p><strong>修复建议:</strong> ${vuln.remediation}</p>
+                </div>
+              `).join('')}
+            </div>`
+          : '<div class="no-vulnerabilities"><p>未发现安全漏洞，请继续保持良好的安全实践。</p></div>'
+        }
+      </div>
+    `
+    
+    // 设置打印窗口内容
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>安全扫描报告 - ${selectedReport.value.id}</title>
+        <style>
+          body {
+            font-family: 'SimSun', 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: white;
+          }
+          .report-header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+          }
+          .report-header h1 {
+            font-size: 24px;
+            margin-bottom: 15px;
+          }
+          .report-meta {
+            text-align: left;
+          }
+          .report-meta p {
+            margin: 5px 0;
+          }
+          h2 {
+            font-size: 18px;
+            margin-top: 25px;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+          }
+          h3 {
+            font-size: 16px;
+            margin-top: 15px;
+            margin-bottom: 10px;
+          }
+          .vulnerability-item {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+          }
+          .vulnerability-item h3 {
+            margin-top: 0;
+          }
+          .no-vulnerabilities {
+            padding: 20px;
+            background-color: #f0f9eb;
+            border-radius: 5px;
+            color: #67c23a;
+          }
+          @media print {
+            body {
+              padding: 0;
+            }
+            .print-controls {
+              display: none !important;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="print-controls" style="margin-bottom: 20px; text-align: center;">
+          <button onclick="window.print()" style="padding: 8px 16px; background-color: #409EFF; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">打印PDF</button>
+          <button onclick="window.close()" style="padding: 8px 16px; background-color: #F56C6C; color: white; border: none; border-radius: 4px; cursor: pointer;">关闭窗口</button>
+        </div>
+        ${reportHtml}
+      </body>
+      </html>
+    `)
+    
+    printWindow.document.close()
+    
+    // 自动触发打印
+    setTimeout(() => {
+      try {
+        printWindow.focus() // 确保窗口获得焦点
+        printWindow.print() // 直接打开打印对话框
+      } catch (e) {
+        console.error('自动打印失败:', e)
+      }
+    }, 1000)
+    
+    ElMessage.success('PDF打印窗口已打开，请选择"保存为PDF"选项')
+  } catch (error) {
+    console.error('生成PDF时出错:', error)
+    ElMessage.error('生成PDF失败: ' + error.message)
+  }
 }
 
 // 跳转到漏洞修复指南

@@ -146,7 +146,17 @@
           </template>
         </el-popconfirm>
         
-        <el-button type="primary" @click="exportReport">导出报告</el-button>
+        <el-dropdown @command="exportReport" trigger="click">
+          <el-button type="primary">
+            导出报告 <el-icon class="ml-1"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="pdf">PDF格式</el-dropdown-item>
+              <el-dropdown-item command="json">JSON格式</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
       
       <!-- 漏洞详情对话框 -->
@@ -203,8 +213,20 @@
             </div>
           </div>
         </template>
+        
+        <template #footer>
+          <span class="dialog-footer">
+            <el-button @click="showDetailDialog = false">关闭</el-button>
+            <el-button type="primary" @click="exportReport('pdf')">生成PDF</el-button>
+          </span>
+        </template>
       </el-dialog>
     </template>
+    
+    <!-- 添加PDF模板组件，但默认隐藏 -->
+    <div v-show="showPdfTemplate" ref="pdfContainer" class="pdf-container">
+      <ReportPDFTemplate :report="report" />
+    </div>
   </div>
 </template>
 
@@ -212,7 +234,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowDown } from '@element-plus/icons-vue'
 import { useScanStore } from '../store/scanStore'
 import ScanStatusBadge from '../components/ScanStatusBadge.vue'
 import VulnerabilityBadge from '../components/VulnerabilityBadge.vue'
@@ -221,6 +243,7 @@ import VulnerabilityTable from '../components/VulnerabilityTable.vue'
 import SQLInjectionGuidance from '../components/guidance/SQLInjectionGuidance.vue'
 import XSSGuidance from '../components/guidance/XSSGuidance.vue'
 import OtherVulnerabilitiesGuidance from '../components/guidance/OtherVulnerabilitiesGuidance.vue'
+import ReportPDFTemplate from '../components/ReportPDFTemplate.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -237,6 +260,10 @@ const vulnSearchQuery = ref('')
 const activeTab = ref('all')
 const showDetailDialog = ref(false)
 const selectedVulnerability = ref(null)
+
+// PDF生成相关
+const pdfContainer = ref(null)
+const showPdfTemplate = ref(false)
 
 // 模块名称映射
 const moduleNames = {
@@ -369,42 +396,169 @@ async function deleteReport() {
 }
 
 // 导出报告
-function exportReport() {
+async function exportReport(format = 'json') {
   if (!report.value) return
   
-  // 创建报告内容
-  const reportContent = {
-    id: report.value.id,
-    url: report.value.url,
-    scanDate: report.value.start_time,
-    status: report.value.status,
-    modules: report.value.modules,
-    vulnerabilities: report.value.vulnerabilities
+  if (format === 'json') {
+    // 创建报告内容
+    const reportContent = {
+      id: report.value.id,
+      url: report.value.url,
+      scanDate: report.value.start_time,
+      status: report.value.status,
+      modules: report.value.modules,
+      vulnerabilities: report.value.vulnerabilities
+    }
+    
+    // 转换为JSON
+    const jsonStr = JSON.stringify(reportContent, null, 2)
+    
+    // 创建Blob对象
+    const blob = new Blob([jsonStr], { type: 'application/json' })
+    
+    // 创建下载链接
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `security-report-${report.value.id}.json`
+    
+    // 触发下载
+    document.body.appendChild(a)
+    a.click()
+    
+    // 清理
+    setTimeout(() => {
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }, 0)
+    
+    ElMessage.success('JSON报告已导出')
+  } else if (format === 'pdf') {
+    try {
+      ElMessage.info('正在准备打印PDF报告，请稍候...')
+      
+      // 显示PDF模板
+      showPdfTemplate.value = true
+      
+      // 等待组件渲染
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // 使用浏览器原生打印功能
+      const printWindow = window.open('', '_blank')
+      
+      if (!printWindow) {
+        throw new Error('请允许浏览器打开弹窗以生成PDF')
+      }
+      
+      // 获取PDF模板元素
+      const element = pdfContainer.value.querySelector('.pdf-template')
+      if (!element) {
+        throw new Error('无法找到PDF模板元素')
+      }
+      
+      // 设置打印窗口内容
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>安全扫描报告 - ${report.value.id}</title>
+          <style>
+            body {
+              font-family: 'SimSun', 'Arial', sans-serif;
+              margin: 0;
+              padding: 20px;
+              background-color: white;
+            }
+            .report-header {
+              text-align: center;
+              margin-bottom: 20px;
+              padding-bottom: 15px;
+              border-bottom: 1px solid #eee;
+            }
+            .report-header h1 {
+              font-size: 24px;
+              margin-bottom: 15px;
+            }
+            .report-meta {
+              text-align: left;
+            }
+            .report-meta p {
+              margin: 5px 0;
+            }
+            h2 {
+              font-size: 18px;
+              margin-top: 25px;
+              margin-bottom: 10px;
+              padding-bottom: 5px;
+              border-bottom: 1px solid #eee;
+            }
+            h3 {
+              font-size: 16px;
+              margin-top: 15px;
+              margin-bottom: 10px;
+            }
+            .vulnerability-item {
+              margin-bottom: 20px;
+              padding: 10px;
+              background-color: #f9f9f9;
+              border-radius: 5px;
+            }
+            .vulnerability-item h3 {
+              margin-top: 0;
+            }
+            .advice-item {
+              margin-bottom: 15px;
+            }
+            ul {
+              padding-left: 20px;
+            }
+            li {
+              margin-bottom: 5px;
+            }
+            @media print {
+              body {
+                padding: 0;
+              }
+              .print-controls {
+                display: none !important;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-controls" style="margin-bottom: 20px; text-align: center;">
+            <button onclick="window.print()" style="padding: 8px 16px; background-color: #409EFF; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">打印PDF</button>
+            <button onclick="window.close()" style="padding: 8px 16px; background-color: #F56C6C; color: white; border: none; border-radius: 4px; cursor: pointer;">关闭窗口</button>
+          </div>
+          ${element.outerHTML}
+        </body>
+        </html>
+      `)
+      
+      printWindow.document.close()
+      
+      // 自动触发打印
+      setTimeout(() => {
+        try {
+          printWindow.focus() // 确保窗口获得焦点
+          printWindow.print() // 直接打开打印对话框
+        } catch (e) {
+          console.error('自动打印失败:', e)
+        }
+      }, 1000)
+      
+      // 隐藏PDF模板
+      showPdfTemplate.value = false
+      
+      ElMessage.success('PDF打印窗口已打开，请选择"保存为PDF"选项')
+    } catch (error) {
+      console.error('生成PDF时出错:', error)
+      ElMessage.error('生成PDF失败: ' + error.message)
+      
+      // 确保隐藏PDF模板
+      showPdfTemplate.value = false
+    }
   }
-  
-  // 转换为JSON
-  const jsonStr = JSON.stringify(reportContent, null, 2)
-  
-  // 创建Blob对象
-  const blob = new Blob([jsonStr], { type: 'application/json' })
-  
-  // 创建下载链接
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `security-report-${report.value.id}.json`
-  
-  // 触发下载
-  document.body.appendChild(a)
-  a.click()
-  
-  // 清理
-  setTimeout(() => {
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }, 0)
-  
-  ElMessage.success('报告已导出')
 }
 
 // 加载报告数据
@@ -449,5 +603,14 @@ watch(
 <style scoped>
 .card {
   @apply bg-white rounded-lg shadow-md p-6;
+}
+
+/* PDF容器样式 */
+.pdf-container {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 210mm; /* A4宽度 */
+  z-index: -1000;
 }
 </style> 

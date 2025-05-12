@@ -23,11 +23,6 @@ const routes = [
     props: true
   },
   {
-    path: '/settings',
-    name: 'Settings',
-    component: () => import('../views/Settings.vue')
-  },
-  {
     path: '/demo',
     name: 'DemoImplementation',
     component: () => import('../views/DemoImplementation.vue')
