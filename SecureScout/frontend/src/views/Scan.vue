@@ -1,36 +1,21 @@
 <template>
   <div class="scan-container p-6">
-    <h1 class="text-2xl font-bold mb-6">创建安全扫描</h1>
-    
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-      <ScanComponent :initial-url="initialUrl" @scan-complete="handleScanComplete" />
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold">创建安全扫描</h1>
+      <div>
+        <el-button @click="goBack">
+          <el-icon class="mr-1"><ArrowLeft /></el-icon>
+          返回
+        </el-button>
+      </div>
     </div>
     
-    <div class="bg-white rounded-lg shadow-md p-6">
-      <h2 class="text-lg font-semibold mb-4">批量扫描（企业版功能）</h2>
-      
-      <el-alert
-        type="info"
-        show-icon
-        :closable="false"
-      >
-        <template #title>
-          批量扫描功能允许您同时扫描多个网站，提高工作效率。
-        </template>
-        <template #default>
-          <p class="mt-2">企业版功能包括：</p>
-          <ul class="list-disc ml-6 mt-2">
-            <li>同时扫描多达50个网站</li>
-            <li>导入CSV文件批量添加目标</li>
-            <li>定时自动扫描</li>
-            <li>自定义扫描策略</li>
-            <li>高级漏洞检测模块</li>
-          </ul>
-          <div class="mt-4">
-            <el-button type="primary">升级到企业版</el-button>
-          </div>
-        </template>
-      </el-alert>
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <ScanComponent 
+        :initial-url="initialUrl" 
+        @scan-complete="handleScanComplete" 
+        @scan-started="handleScanStarted"
+      />
     </div>
   </div>
 </template>
@@ -38,29 +23,73 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 import ScanComponent from '@/components/ScanComponent.vue'
+import { useScanStore } from '@/store/scanStore'
 
 const route = useRoute()
 const router = useRouter()
+const scanStore = useScanStore()
 
 // 如果从URL参数中传入了初始URL，则使用它
 const initialUrl = computed(() => route.query.url || '')
+const currentScanId = ref(null)
+
+// 处理扫描开始事件
+function handleScanStarted(data) {
+  currentScanId.value = data.scanId
+  ElMessage({
+    message: `扫描任务 ${data.scanId} 已开始`,
+    type: 'success'
+  })
+}
 
 // 处理扫描完成事件
 function handleScanComplete(result) {
   if (result.scanId) {
     ElMessage({
-      message: '扫描已完成，正在跳转到报告页面...',
+      message: '扫描已完成，即将跳转到报告页面...',
       type: 'success'
     })
     
-    // 延迟跳转到报告页面
+    // 延迟跳转到扫描中心页面
     setTimeout(() => {
-      router.push(`/reports/${result.scanId}`)
+      router.push('/scan-center')
     }, 1500)
   }
 }
+
+// 返回上一页
+function goBack() {
+  if (currentScanId.value) {
+    ElMessageBox.confirm(
+      '扫描正在进行中，返回将继续在后台运行。确定要返回吗？',
+      '确认返回',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    ).then(() => {
+      router.push('/scan-center')
+    }).catch(() => {})
+  } else {
+    router.push('/scan-center')
+  }
+}
+
+// 在组件挂载时，检查是否从其他页面传入URL参数
+onMounted(() => {
+  // 如果是从其他页面跳转过来的，可以加载扫描配置
+  scanStore.loadConfig()
+  
+  // 如果URL中有传递的URL参数，表示是从"重新扫描"按钮跳转过来的
+  // 延迟一下，确保ScanComponent已经完全加载
+  if (route.query.url) {
+    ElMessage.info(`准备扫描: ${route.query.url}`)
+  }
+})
 </script>
 
 <style scoped>

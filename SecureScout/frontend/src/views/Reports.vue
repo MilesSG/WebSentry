@@ -371,7 +371,11 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts'
+import { Delete, Refresh, DocumentRemove, View } from '@element-plus/icons-vue'
+import ScanStatusBadge from '@/components/ScanStatusBadge.vue'
+import { useScanStore } from '@/store/scanStore'
 
+const scanStore = useScanStore()
 const router = useRouter()
 
 // 状态
@@ -636,10 +640,10 @@ async function deleteReport() {
   isDeleting.value = true
   
   try {
-    // 模拟API调用延迟
-    await new Promise(resolve => setTimeout(resolve, 800))
+    // 使用scanStore删除报告，确保同步到localStorage
+    await scanStore.deleteReport(reportToDelete.value)
     
-    // 删除报告
+    // 更新界面显示
     reports.value = reports.value.filter(r => r.id !== reportToDelete.value)
     
     ElMessage({
@@ -651,7 +655,7 @@ async function deleteReport() {
     reportToDelete.value = null
   } catch (error) {
     console.error('删除报告失败:', error)
-    ElMessage.error('删除报告失败，请稍后重试')
+    ElMessage.error('删除报告失败: ' + (error.message || '未知错误'))
   } finally {
     isDeleting.value = false
   }

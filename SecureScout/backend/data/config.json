@@ -1,11 +1,1 @@
-{
-  "scan_timeout": 30,
-  "concurrent_scans": 5,
-  "user_agent": "SecureScout/1.0",
-  "default_scan_modules": [
-    "sql_injection",
-    "xss",
-    "csrf",
-    "file_upload"
-  ]
-}
+{"scan_timeout":30,"concurrent_scans":5,"user_agent":"SecureScout/1.0","default_scan_modules":["sql_injection","xss","csrf","file_upload"]}

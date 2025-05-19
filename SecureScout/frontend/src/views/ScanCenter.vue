@@ -56,21 +56,23 @@
         </el-table-column>
         <el-table-column label="操作" width="150">
           <template #default="{ row }">
-            <el-button 
-              size="small" 
-              type="primary" 
-              @click="viewScanDetails(row.id)"
-            >
-              详情
-            </el-button>
-            <el-button 
-              size="small" 
-              type="danger"
-              @click="cancelScan(row)"
-              v-if="row.status === 'pending' || row.status === 'in_progress'"
-            >
-              取消
-            </el-button>
+            <div class="flex flex-wrap gap-2">
+              <el-button 
+                size="small" 
+                type="primary" 
+                @click="viewScanDetails(row.id)"
+              >
+                详情
+              </el-button>
+              <el-button 
+                size="small" 
+                type="danger"
+                @click="cancelScan(row)"
+                v-if="row.status === 'pending' || row.status === 'in_progress'"
+              >
+                取消
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -93,11 +95,21 @@
             </template>
           </el-input>
           
-          <el-select v-model="statusFilter" placeholder="状态筛选" clearable class="w-32">
+          <el-select v-model="statusFilter" placeholder="状态筛选" clearable class="w-32 mr-2">
             <el-option label="全部" value="" />
             <el-option label="已完成" value="completed" />
             <el-option label="失败" value="failed" />
           </el-select>
+          
+          <el-popconfirm
+            title="确定要清空所有扫描记录吗？这将删除所有已完成和已失败的扫描记录。"
+            @confirm="clearAllScanHistory"
+            confirm-button-type="danger"
+          >
+            <template #reference>
+              <el-button size="small" type="danger">清空历史</el-button>
+            </template>
+          </el-popconfirm>
         </div>
       </div>
       
@@ -141,41 +153,43 @@
         </el-table-column>
         <el-table-column label="操作" width="200">
           <template #default="{ row }">
-            <el-button 
-              size="small" 
-              type="primary" 
-              @click="viewScanDetails(row.id)"
-            >
-              详情
-            </el-button>
-            <el-button 
-              size="small" 
-              type="success" 
-              @click="viewScanReport(row.id)"
-              v-if="row.status === 'completed'"
-            >
-              报告
-            </el-button>
-            <el-button 
-              size="small" 
-              @click="runAgain(row)"
-              v-if="row.status === 'completed' || row.status === 'failed'"
-            >
-              重新扫描
-            </el-button>
-            <el-popconfirm
-              title="确定要删除此扫描记录吗？"
-              @confirm="deleteScan(row)"
-              confirm-button-type="danger"
-            >
-              <template #reference>
-                <el-button 
-                  size="small" 
-                  type="danger"
-                  :icon="Delete"
-                />
-              </template>
-            </el-popconfirm>
+            <div class="flex flex-wrap gap-2">
+              <el-button 
+                size="small" 
+                type="primary" 
+                @click="viewScanDetails(row.id)"
+              >
+                详情
+              </el-button>
+              <el-button 
+                size="small" 
+                type="success" 
+                @click="viewScanReport(row.id)"
+                v-if="row.status === 'completed'"
+              >
+                报告
+              </el-button>
+              <el-button 
+                size="small" 
+                @click="runAgain(row)"
+                v-if="row.status === 'completed' || row.status === 'failed'"
+              >
+                重新扫描
+              </el-button>
+              <el-popconfirm
+                title="确定要删除此扫描记录吗？"
+                @confirm="deleteScan(row)"
+                confirm-button-type="danger"
+              >
+                <template #reference>
+                  <el-button 
+                    size="small" 
+                    type="danger"
+                    :icon="Delete"
+                  />
+                </template>
+              </el-popconfirm>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -654,7 +668,9 @@ import {
 } from '@element-plus/icons-vue'
 import ScanStatusBadge from '@/components/ScanStatusBadge.vue'
 import { scanApi } from '@/api'
+import { useScanStore } from '@/store/scanStore'
 
+const scanStore = useScanStore()
 const router = useRouter()
 
 // 扫描数据和状态
@@ -683,124 +699,25 @@ const currentScanVulnerabilities = ref([])
 // PDF生成相关
 const pdfContainer = ref(null)
 
-// 获取所有扫描
+// 获取扫描列表
 async function fetchScans() {
+  isLoading.value = true
+  
   try {
-    isLoading.value = true
+    // 从scanStore获取所有扫描记录
+    const results = await scanStore.getAllScans()
+    // 确保这里获取的是最新数据
+    scans.value = [...results]
+    totalItems.value = results.length
     
     // 获取活跃扫描
-    // 模拟活跃扫描数据
-    const mockActiveScans = [
-      {
-        id: 'SCN-20231025-003',
-        url: 'https://test-security.com',
-        start_time: new Date().toISOString(),
-        status: 'in_progress',
-        progress: 45,
-        stage: '爬取网站结构'
-      },
-      {
-        id: 'SCN-20231026-001',
-        url: 'https://scan-demo.org',
-        start_time: new Date(Date.now() - 5 * 60000).toISOString(),
-        status: 'in_progress',
-        progress: 78,
-        stage: '安全漏洞检测'
-      },
-      {
-        id: 'SCN-20231026-002',
-        url: 'https://api.example.org',
-        start_time: new Date(Date.now() - 10 * 60000).toISOString(),
-        status: 'pending',
-        progress: 0,
-        stage: '等待扫描'
-      }
-    ]
-    
-    activeScans.value = mockActiveScans
-    
-    // 模拟扫描历史数据，添加更多样本
-    const mockScans = [
-      {
-        id: 'SCN-20231020-001',
-        url: 'https://secure-demo.org',
-        start_time: '2023-10-20T22:15:00Z',
-        end_time: '2023-10-20T22:18:30Z',
-        status: 'completed',
-        vulnerabilities: []
-      },
-      {
-        id: 'SCN-20231015-002',
-        url: 'https://example.com',
-        start_time: '2023-10-15T18:30:00Z',
-        end_time: '2023-10-15T18:35:25Z',
-        status: 'completed',
-        vulnerabilities: [
-          { type: 'XSS', severity: '高' },
-          { type: 'SQL注入', severity: '高' },
-          { type: '信息泄露', severity: '中' }
-        ]
-      },
-      {
-        id: 'SCN-20231010-003',
-        url: 'https://test-site.com',
-        start_time: '2023-10-10T14:20:00Z',
-        end_time: '2023-10-10T14:22:15Z',
-        status: 'failed',
-        error: '连接超时'
-      },
-      {
-        id: 'SCN-20231005-004',
-        url: 'https://blog.example.org',
-        start_time: '2023-10-05T09:30:00Z',
-        end_time: '2023-10-05T09:38:22Z',
-        status: 'completed',
-        vulnerabilities: [
-          { type: 'CSRF', severity: '中' },
-          { type: '配置错误', severity: '低' }
-        ]
-      },
-      {
-        id: 'SCN-20231001-005',
-        url: 'https://shop.example.com',
-        start_time: '2023-10-01T11:45:00Z',
-        end_time: '2023-10-01T11:52:10Z',
-        status: 'completed',
-        vulnerabilities: [
-          { type: 'XSS', severity: '中' },
-          { type: '文件包含', severity: '高' },
-          { type: '目录遍历', severity: '高' },
-          { type: '敏感信息泄露', severity: '中' }
-        ]
-      },
-      {
-        id: 'SCN-20230925-006',
-        url: 'https://api.test.com',
-        start_time: '2023-09-25T15:20:00Z',
-        end_time: '2023-09-25T15:23:45Z',
-        status: 'completed',
-        vulnerabilities: []
-      },
-      {
-        id: 'SCN-20230920-007',
-        url: 'https://admin.example.org',
-        start_time: '2023-09-20T08:10:00Z',
-        end_time: '2023-09-20T08:15:32Z',
-        status: 'failed',
-        error: '认证失败'
-      }
-    ]
-    
-    // 模拟延迟
-    setTimeout(() => {
-      scans.value = mockScans
-      totalItems.value = mockScans.length
-      isLoading.value = false
-    }, 800)
-    
+    activeScans.value = scans.value.filter(s => 
+      s.status === 'pending' || s.status === 'in_progress'
+    )
   } catch (error) {
     console.error('获取扫描记录失败:', error)
     ElMessage.error('获取扫描记录失败')
+  } finally {
     isLoading.value = false
   }
 }
@@ -881,15 +798,14 @@ function runAgain(scan) {
 // 删除扫描记录
 async function deleteScan(scan) {
   try {
-    // 实际项目中应调用API删除扫描记录
-    // await scanApi.deleteScan(scan.id)
-    
-    // 模拟删除成功
+    // 使用scanStore实现删除，这样会同步更新localStorage
+    await scanStore.deleteScan(scan.id)
+    // 更新当前页面数据
     scans.value = scans.value.filter(s => s.id !== scan.id)
     ElMessage.success('扫描记录已删除')
   } catch (error) {
     console.error('删除扫描记录失败:', error)
-    ElMessage.error('删除扫描记录失败')
+    ElMessage.error('删除扫描失败: ' + (error.message || '未知错误'))
   }
 }
 
@@ -1203,6 +1119,19 @@ async function generatePDF() {
   }
 }
 
+// 添加清空所有扫描历史记录功能
+async function clearAllScanHistory() {
+  try {
+    await scanStore.clearAllScans()
+    // 重新获取扫描列表
+    fetchScans()
+    ElMessage.success('扫描历史已清空')
+  } catch (error) {
+    console.error('清空扫描历史失败:', error)
+    ElMessage.error('清空扫描历史失败: ' + (error.message || '未知错误'))
+  }
+}
+
 onMounted(() => {
   fetchScans()
   
@@ -1236,6 +1165,9 @@ onMounted(() => {
                   }
                 }) : []
             })
+            
+            // 更新localStorage
+            scanStore.saveScansToLocalStorage && scanStore.saveScansToLocalStorage()
             
             // 通知用户
             ElMessage.success(`扫描任务 ${scan.id} 已完成`)

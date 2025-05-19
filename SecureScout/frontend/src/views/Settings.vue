@@ -1,287 +1,314 @@
 <template>
-  <div>
-    <h1 class="text-2xl font-semibold text-gray-900 mb-6">系统设置</h1>
-    
-    <div v-if="isLoading" class="flex justify-center items-center h-64">
-      <el-skeleton style="width: 100%" :rows="6" animated />
-    </div>
-    
-    <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-md p-4 text-red-700 mb-6">
-      加载配置失败: {{ error }}
-    </div>
-    
-    <div v-else>
-      <!-- 基本设置 -->
-      <div class="card mb-6">
-        <h2 class="text-lg font-medium text-gray-900 mb-4">基本设置</h2>
-        
-        <el-form 
-          :model="configForm" 
-          label-position="top" 
-          class="max-w-3xl"
-          @submit.prevent="saveConfig"
-        >
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <el-form-item label="扫描超时时间 (秒)">
-              <el-input-number 
-                v-model="configForm.scan_timeout" 
-                :min="5" 
-                :max="300" 
-                class="w-full" 
-              />
-            </el-form-item>
-            
-            <el-form-item label="并发扫描数量">
-              <el-input-number 
-                v-model="configForm.concurrent_scans" 
-                :min="1" 
-                :max="20" 
-                class="w-full" 
-              />
-            </el-form-item>
-          </div>
-          
-          <el-form-item label="User-Agent">
-            <el-input v-model="configForm.user_agent" />
-          </el-form-item>
-          
-          <el-form-item label="默认扫描模块">
-            <el-select 
-              v-model="configForm.default_scan_modules" 
-              multiple 
-              class="w-full"
-            >
-              <el-option
-                v-for="module in scanModules"
-                :key="module.value"
-                :label="module.label"
-                :value="module.value"
-              />
-            </el-select>
-          </el-form-item>
-          
-          <div class="flex justify-end space-x-4 mt-4">
-            <el-button @click="resetConfig">
-              重置为默认值
-            </el-button>
-            <el-button 
-              type="primary" 
-              @click="saveConfig" 
-              :loading="isSaving"
-            >
-              保存设置
-            </el-button>
-          </div>
-        </el-form>
+  <div class="settings-container p-6">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold">安全设置</h1>
+      <div>
+        <el-button @click="goBack">
+          <el-icon class="mr-1"><ArrowLeft /></el-icon>
+          返回
+        </el-button>
       </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4">扫描配置</h2>
       
-      <!-- 漏洞库设置 -->
-      <div class="card">
-        <h2 class="text-lg font-medium text-gray-900 mb-4">漏洞库配置</h2>
+      <el-form 
+        :model="scanConfig" 
+        label-position="top" 
+        class="max-w-3xl"
+      >
+        <el-form-item label="扫描超时设置 (秒)">
+          <el-slider 
+            v-model="scanConfig.timeout" 
+            :min="10" 
+            :max="300" 
+            :step="10"
+            show-input
+          />
+        </el-form-item>
         
-        <el-tabs>
-          <el-tab-pane v-for="(vuln, key) in vulnerabilityLibrary" :key="key" :label="getVulnTypeName(key)">
-            <el-form :model="vuln" label-position="top">
-              <el-form-item label="严重程度">
-                <el-select v-model="vuln.severity">
-                  <el-option value="低" label="低" />
-                  <el-option value="中" label="中" />
-                  <el-option value="高" label="高" />
-                  <el-option value="严重" label="严重" />
-                </el-select>
-              </el-form-item>
-              
-              <el-form-item label="描述">
-                <el-input v-model="vuln.description" />
-              </el-form-item>
-              
-              <el-form-item v-if="vuln.patterns" label="检测模式">
-                <el-tag
-                  v-for="(pattern, index) in vuln.patterns"
-                  :key="index"
-                  closable
-                  @close="removePattern(key, index)"
-                  class="mr-2 mb-2"
-                >
-                  {{ pattern }}
-                </el-tag>
-                
-                <el-input
-                  v-if="inputVisible[key]"
-                  ref="inputRef"
-                  v-model="inputValue"
-                  class="w-80 mt-2"
-                  @keyup.enter="addPattern(key)"
-                  @blur="addPattern(key)"
-                />
-                <el-button v-else class="mt-2" @click="showInput(key)">
-                  添加模式
-                </el-button>
-              </el-form-item>
-              
-              <div class="flex justify-end space-x-4 mt-4">
-                <el-button 
-                  type="primary" 
-                  @click="saveVulnerabilityRule(key)" 
-                  :loading="isSavingRule"
-                >
-                  更新规则
-                </el-button>
-              </div>
-            </el-form>
-          </el-tab-pane>
-        </el-tabs>
-      </div>
+        <el-form-item label="最大并发扫描任务数">
+          <el-radio-group v-model="scanConfig.concurrent_scans">
+            <el-radio-button :label="1">1</el-radio-button>
+            <el-radio-button :label="3">3</el-radio-button>
+            <el-radio-button :label="5">5</el-radio-button>
+            <el-radio-button :label="10">10</el-radio-button>
+          </el-radio-group>
+          <div class="text-sm text-gray-500 mt-1">
+            允许同时进行的最大扫描任务数，较高的设置可能会影响系统性能
+          </div>
+        </el-form-item>
+        
+        <el-form-item label="浏览器用户代理">
+          <el-input v-model="scanConfig.user_agent" />
+          <div class="text-sm text-gray-500 mt-1">
+            扫描时使用的用户代理标识
+          </div>
+        </el-form-item>
+        
+        <el-divider />
+        
+        <h3 class="font-semibold mb-4">默认启用的扫描模块</h3>
+        <div class="flex flex-wrap gap-3">
+          <el-checkbox 
+            v-for="(def, key) in scanConfig.vulnerability_definitions" 
+            :key="key"
+            v-model="scanConfig.default_modules"
+            :label="key"
+          >
+            {{ moduleLabels[key] || key }}
+            <el-tag size="small" class="ml-1" :type="getSeverityType(def.severity)">
+              {{ def.severity }}
+            </el-tag>
+          </el-checkbox>
+        </div>
+        
+        <el-divider />
+        
+        <div class="flex justify-between mt-4">
+          <el-button @click="resetConfig">
+            恢复默认设置
+          </el-button>
+          <el-button type="primary" @click="saveConfig">
+            保存设置
+          </el-button>
+        </div>
+      </el-form>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4">通知设置</h2>
+      
+      <el-form label-position="top" class="max-w-3xl">
+        <el-form-item label="电子邮件通知">
+          <el-switch v-model="notificationSettings.email.enabled" />
+          <div class="text-sm text-gray-500 mt-1">
+            启用后，扫描完成时将自动发送报告到指定邮箱
+          </div>
+        </el-form-item>
+        
+        <el-form-item label="通知接收邮箱" v-if="notificationSettings.email.enabled">
+          <el-input v-model="notificationSettings.email.address" placeholder="输入接收通知的邮箱地址" />
+        </el-form-item>
+        
+        <el-form-item label="通知条件">
+          <el-checkbox v-model="notificationSettings.onComplete">扫描完成时</el-checkbox>
+          <el-checkbox v-model="notificationSettings.onVulnerabilityFound">发现漏洞时</el-checkbox>
+          <el-checkbox v-model="notificationSettings.onHighRisk">发现高风险漏洞时</el-checkbox>
+        </el-form-item>
+        
+        <div class="flex justify-end mt-4">
+          <el-button type="primary" @click="saveNotificationSettings">
+            保存通知设置
+          </el-button>
+        </div>
+      </el-form>
+    </div>
+    
+    <div class="bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-xl font-semibold mb-4">账户安全</h2>
+      
+      <el-form label-position="top" class="max-w-3xl">
+        <el-form-item label="API密钥">
+          <div class="flex items-center">
+            <el-input 
+              v-model="apiKey" 
+              placeholder="无API密钥" 
+              :type="showApiKey ? 'text' : 'password'"
+              class="mr-2"
+              readonly
+            />
+            <el-button @click="showApiKey = !showApiKey">
+              {{ showApiKey ? '隐藏' : '显示' }}
+            </el-button>
+            <el-button type="primary" @click="regenerateApiKey">
+              重新生成
+            </el-button>
+          </div>
+          <div class="text-sm text-gray-500 mt-1">
+            用于API访问，请妥善保管
+          </div>
+        </el-form-item>
+        
+        <el-form-item label="双因素认证">
+          <el-switch v-model="securitySettings.twoFactor" />
+          <div class="text-sm text-gray-500 mt-1">
+            增强账户安全，登录时需要额外验证
+          </div>
+        </el-form-item>
+        
+        <div class="flex justify-end mt-4">
+          <el-button type="primary" @click="saveSecuritySettings">
+            保存账户安全设置
+          </el-button>
+        </div>
+      </el-form>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { useConfigStore } from '../store/configStore'
+import { ArrowLeft } from '@element-plus/icons-vue'
+import { useScanStore } from '@/store/scanStore'
 
-const configStore = useConfigStore()
+const router = useRouter()
+const scanStore = useScanStore()
 
-// 表单数据
-const configForm = ref({
-  scan_timeout: 30,
-  concurrent_scans: 5,
-  user_agent: '',
-  default_scan_modules: []
-})
-
-// 漏洞库数据
-const vulnerabilityLibrary = ref({})
-
-// 状态
-const isLoading = ref(true)
-const isSaving = ref(false)
-const isSavingRule = ref(false)
-const error = ref(null)
-
-// 模式输入
-const inputVisible = reactive({})
-const inputValue = ref('')
-const inputRef = ref(null)
-
-// 扫描模块选项
-const scanModules = [
-  { label: 'SQL注入检测', value: 'sql_injection' },
-  { label: 'XSS跨站脚本', value: 'xss' },
-  { label: 'CSRF跨站请求伪造', value: 'csrf' },
-  { label: '文件上传漏洞', value: 'file_upload' }
-]
-
-// 漏洞类型名称映射
-const vulnTypeNames = {
-  'sql_injection': 'SQL注入',
-  'xss': '跨站脚本(XSS)',
-  'csrf': '跨站请求伪造(CSRF)',
-  'file_upload': '文件上传漏洞'
-}
-
-// 获取漏洞类型名称
-function getVulnTypeName(type) {
-  return vulnTypeNames[type] || type
-}
-
-// 显示输入框
-function showInput(key) {
-  inputVisible[key] = true
-  inputValue.value = ''
-  nextTick(() => {
-    inputRef.value?.focus()
-  })
-}
-
-// 添加模式
-function addPattern(key) {
-  if (inputValue.value && vulnerabilityLibrary.value[key].patterns) {
-    if (!vulnerabilityLibrary.value[key].patterns.includes(inputValue.value)) {
-      vulnerabilityLibrary.value[key].patterns.push(inputValue.value)
+// 扫描配置
+const scanConfig = ref({
+  timeout: 60,
+  concurrent_scans: 3,
+  user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+  default_modules: ['sql_injection', 'xss', 'csrf'],
+  vulnerability_definitions: {
+    'sql_injection': {
+      severity: '高',
+      description: 'SQL注入漏洞允许攻击者将恶意SQL查询注入应用程序，可能导致数据泄露或损坏'
+    },
+    'xss': {
+      severity: '中',
+      description: '跨站脚本攻击允许攻击者在受害者浏览器中注入和执行恶意脚本'
+    },
+    'csrf': {
+      severity: '中',
+      description: '跨站请求伪造漏洞允许攻击者诱导用户执行非预期操作'
+    },
+    'file_upload': {
+      severity: '高',
+      description: '不安全的文件上传允许攻击者上传恶意文件，可能导致远程代码执行'
     }
   }
-  inputVisible[key] = false
+})
+
+// 模块标签映射
+const moduleLabels = {
+  'sql_injection': 'SQL注入检测',
+  'xss': '跨站脚本(XSS)检测',
+  'csrf': '跨站请求伪造检测',
+  'file_upload': '文件上传漏洞检测'
 }
 
-// 移除模式
-function removePattern(key, index) {
-  vulnerabilityLibrary.value[key].patterns.splice(index, 1)
+// 通知设置
+const notificationSettings = reactive({
+  email: {
+    enabled: false,
+    address: ''
+  },
+  onComplete: true,
+  onVulnerabilityFound: true,
+  onHighRisk: true
+})
+
+// 安全设置
+const securitySettings = reactive({
+  twoFactor: false
+})
+
+// API密钥
+const apiKey = ref('sk_test_abcdefghijklmnopqrstuvwxyz123456')
+const showApiKey = ref(false)
+
+// 获取严重程度类型
+function getSeverityType(severity) {
+  if (severity === '严重' || severity === '高') return 'danger'
+  if (severity === '中') return 'warning'
+  if (severity === '低') return 'info'
+  return 'info'
 }
 
-// 保存配置
-async function saveConfig() {
-  isSaving.value = true
-  
+// 加载设置
+async function loadScanConfig() {
   try {
-    await configStore.updateConfig(configForm.value)
-    ElMessage.success('设置已保存')
-  } catch (err) {
-    ElMessage.error('保存设置失败')
-    console.error('保存设置失败:', err)
-  } finally {
-    isSaving.value = false
+    const config = await scanStore.loadConfig()
+    if (config) {
+      scanConfig.value = { ...config }
+    }
+  } catch (error) {
+    console.error('加载配置失败:', error)
+    ElMessage.error('加载配置失败')
+  }
+}
+
+// 保存扫描配置
+async function saveConfig() {
+  try {
+    await scanStore.saveConfig(scanConfig.value)
+    ElMessage.success('配置已保存')
+  } catch (error) {
+    console.error('保存配置失败:', error)
+    ElMessage.error('保存配置失败')
   }
 }
 
 // 重置配置
-async function resetConfig() {
-  try {
-    if (confirm('确定要重置所有设置到默认值吗？')) {
-      const config = await configStore.resetConfig()
-      configForm.value = { ...config }
-      ElMessage.success('设置已重置为默认值')
+function resetConfig() {
+  scanConfig.value = {
+    timeout: 60,
+    concurrent_scans: 3,
+    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    default_modules: ['sql_injection', 'xss', 'csrf'],
+    vulnerability_definitions: {
+      'sql_injection': {
+        severity: '高',
+        description: 'SQL注入漏洞允许攻击者将恶意SQL查询注入应用程序，可能导致数据泄露或损坏'
+      },
+      'xss': {
+        severity: '中',
+        description: '跨站脚本攻击允许攻击者在受害者浏览器中注入和执行恶意脚本'
+      },
+      'csrf': {
+        severity: '中',
+        description: '跨站请求伪造漏洞允许攻击者诱导用户执行非预期操作'
+      },
+      'file_upload': {
+        severity: '高',
+        description: '不安全的文件上传允许攻击者上传恶意文件，可能导致远程代码执行'
+      }
     }
-  } catch (err) {
-    ElMessage.error('重置设置失败')
-    console.error('重置设置失败:', err)
   }
+  ElMessage.info('已恢复默认设置')
 }
 
-// 保存漏洞规则
-async function saveVulnerabilityRule(vulnType) {
-  isSavingRule.value = true
-  
-  try {
-    await configStore.updateVulnerabilityRule(vulnType, vulnerabilityLibrary.value[vulnType])
-    ElMessage.success('规则已更新')
-  } catch (err) {
-    ElMessage.error('更新规则失败')
-    console.error('更新规则失败:', err)
-  } finally {
-    isSavingRule.value = false
-  }
+// 保存通知设置
+function saveNotificationSettings() {
+  ElMessage.success('通知设置已保存')
 }
 
-// 加载数据
-async function loadData() {
-  isLoading.value = true
-  error.value = null
-  
-  try {
-    // 加载配置
-    const config = await configStore.fetchConfig()
-    configForm.value = { ...config }
-    
-    // 加载漏洞库
-    const vulnLibrary = await configStore.fetchVulnerabilityLibrary()
-    vulnerabilityLibrary.value = vulnLibrary
-    
-    // 初始化inputVisible
-    Object.keys(vulnLibrary).forEach(key => {
-      inputVisible[key] = false
-    })
-  } catch (err) {
-    error.value = err.message || '加载数据失败'
-    console.error('加载数据失败:', err)
-  } finally {
-    isLoading.value = false
-  }
+// 保存安全设置
+function saveSecuritySettings() {
+  ElMessage.success('安全设置已保存')
 }
 
-// 生命周期钩子
+// 重新生成API密钥
+function regenerateApiKey() {
+  // 生成随机API密钥
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let newKey = 'sk_test_'
+  for (let i = 0; i < 32; i++) {
+    newKey += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  apiKey.value = newKey
+  ElMessage.success('API密钥已重新生成')
+}
+
+// 返回上一页
+function goBack() {
+  router.push('/')
+}
+
+// 在组件加载时获取当前配置
 onMounted(() => {
-  loadData()
+  loadScanConfig()
 })
-</script> 
+</script>
+
+<style scoped>
+.settings-container {
+  min-height: calc(100vh - 64px);
+  background-color: #f5f7fa;
+}
+</style> 

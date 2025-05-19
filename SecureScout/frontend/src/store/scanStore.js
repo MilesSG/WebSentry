@@ -121,7 +121,17 @@ export const useScanStore = defineStore('scan', () => {
       }
       
       // 创建新扫描对象
-      const scanId = Date.now().toString()
+      const date = new Date();
+      const formattedDate = 
+        date.getFullYear().toString().substring(2) + 
+        (date.getMonth() + 1).toString().padStart(2, '0') + 
+        date.getDate().toString().padStart(2, '0');
+      
+      // 确保扫描ID不重复，格式为SCN-YYYYMMDD-xxx
+      const todayScans = scans.value.filter(scan => scan.id.includes(`SCN-${formattedDate}`));
+      const sequenceNumber = (todayScans.length + 1).toString().padStart(3, '0');
+      const scanId = `SCN-${formattedDate}-${sequenceNumber}`;
+      
       const newScan = {
         id: scanId,
         url: url,
@@ -370,12 +380,43 @@ export const useScanStore = defineStore('scan', () => {
         
         scans.value.splice(scanIndex, 1)
         saveScansToLocalStorage()
+        
+        // 同时检查结果列表中是否有对应ID的扫描，如果有也删除
+        const resultIndex = scanResults.value.findIndex(r => r.id === scanId)
+        if (resultIndex !== -1) {
+          scanResults.value.splice(resultIndex, 1)
+          saveScanResultsToLocalStorage()
+        }
       }
       
       return true
     } catch (err) {
       error.value = '删除扫描失败: ' + (err.message || '未知错误')
       console.error('删除扫描失败:', err)
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+  
+  // 清空所有扫描记录
+  async function clearAllScans() {
+    try {
+      isLoading.value = true
+      error.value = null
+      
+      // 清空扫描列表(保留正在进行的扫描)
+      scans.value = scans.value.filter(s => ['pending', 'running'].includes(s.status))
+      saveScansToLocalStorage()
+      
+      // 清空结果列表
+      scanResults.value = []
+      saveScanResultsToLocalStorage()
+      
+      return true
+    } catch (err) {
+      error.value = '清空扫描记录失败: ' + (err.message || '未知错误')
+      console.error('清空扫描记录失败:', err)
       throw err
     } finally {
       isLoading.value = false
@@ -484,6 +525,77 @@ export const useScanStore = defineStore('scan', () => {
   
   // 初始化加载
   loadFromLocalStorage()
+
+  // 初始化模拟数据（如果本地存储为空）
+  function initMockDataIfEmpty() {
+    // 如果本地存储中没有扫描数据，初始化模拟数据
+    if (scans.value.length === 0) {
+      const mockScans = [
+        {
+          id: 'SCN-20231020-001',
+          url: 'https://secure-demo.org',
+          start_time: '2023-10-20T22:15:00Z',
+          end_time: '2023-10-20T22:18:30Z',
+          status: 'completed',
+          vulnerabilities: []
+        },
+        {
+          id: 'SCN-20231010-003',
+          url: 'https://test-site.com',
+          start_time: '2023-10-10T14:20:00Z',
+          end_time: '2023-10-10T14:22:15Z',
+          status: 'failed',
+          error: '连接超时'
+        },
+        {
+          id: 'SCN-20231005-004',
+          url: 'https://blog.example.org',
+          start_time: '2023-10-05T09:30:00Z',
+          end_time: '2023-10-05T09:38:22Z',
+          status: 'completed',
+          vulnerabilities: [
+            { type: 'CSRF', severity: '中' },
+            { type: '配置错误', severity: '低' }
+          ]
+        },
+        {
+          id: 'SCN-20231001-005',
+          url: 'https://shop.example.com',
+          start_time: '2023-10-01T11:45:00Z',
+          end_time: '2023-10-01T11:52:10Z',
+          status: 'completed',
+          vulnerabilities: [
+            { type: 'XSS', severity: '中' },
+            { type: '文件包含', severity: '高' },
+            { type: '目录遍历', severity: '高' },
+            { type: '敏感信息泄露', severity: '中' }
+          ]
+        },
+        {
+          id: 'SCN-20230925-006',
+          url: 'https://api.test.com',
+          start_time: '2023-09-25T15:20:00Z',
+          end_time: '2023-09-25T15:23:45Z',
+          status: 'completed',
+          vulnerabilities: []
+        },
+        {
+          id: 'SCN-20230920-007',
+          url: 'https://admin.example.org',
+          start_time: '2023-09-20T08:10:00Z',
+          end_time: '2023-09-20T08:15:32Z',
+          status: 'failed',
+          error: '认证失败'
+        }
+      ]
+      
+      scans.value = mockScans
+      saveScansToLocalStorage()
+    }
+  }
+
+  // 调用初始化函数
+  initMockDataIfEmpty()
   
   return {
     // 状态
@@ -501,9 +613,13 @@ export const useScanStore = defineStore('scan', () => {
     getAllResults,
     cancelScan,
     deleteScan,
+    clearAllScans,
     deleteReport,
     saveConfig,
     loadConfig,
-    updateScanStatus
+    updateScanStatus,
+    initMockDataIfEmpty,
+    saveScansToLocalStorage,
+    saveScanResultsToLocalStorage
   }
 }) 

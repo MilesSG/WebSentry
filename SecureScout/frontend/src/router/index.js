@@ -8,6 +8,11 @@ const routes = [
   },
   {
     path: '/scan',
+    name: 'Scan',
+    component: () => import('../views/Scan.vue')
+  },
+  {
+    path: '/scan-center',
     name: 'ScanCenter',
     component: () => import('../views/ScanCenter.vue')
   },
@@ -21,6 +26,11 @@ const routes = [
     name: 'ReportDetail',
     component: () => import('../views/ReportDetail.vue'),
     props: true
+  },
+  {
+    path: '/settings',
+    name: 'Settings',
+    component: () => import('../views/Settings.vue')
   },
   {
     path: '/demo',

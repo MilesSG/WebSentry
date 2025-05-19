@@ -342,7 +342,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, defineProps, defineEmits } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { 
@@ -352,11 +352,12 @@ import {
   WarningFilled
 } from '@element-plus/icons-vue'
 import { scanApi } from '@/api'
+import { useScanStore } from '@/store/scanStore'
 
 const router = useRouter()
+const scanStore = useScanStore()
 const scanFormRef = ref(null)
 
-// 定义组件属性
 const props = defineProps({
   initialUrl: {
     type: String,
@@ -364,8 +365,7 @@ const props = defineProps({
   }
 })
 
-// 定义事件
-const emit = defineEmits(['scan-complete'])
+const emit = defineEmits(['scan-complete', 'scan-started'])
 
 // 扫描模板
 const scanTemplates = [
@@ -441,10 +441,16 @@ const scanForm = reactive({
   depth: 3
 })
 
-// 监听initialUrl变化
+// 监视initialUrl属性的变化，自动填充URL并可选启动扫描
 watch(() => props.initialUrl, (newUrl) => {
-  scanForm.url = newUrl
-})
+  if (newUrl && !isScanning.value) {
+    scanForm.url = newUrl
+    // 如果URL是从"重新扫描"跳转过来的，延迟一小段时间后自动开始扫描
+    setTimeout(() => {
+      submitForm()
+    }, 1000)
+  }
+}, { immediate: true })
 
 // 表单验证规则
 const rules = {
@@ -582,77 +588,47 @@ function viewScanReport() {
 }
 
 // 启动扫描
-function startScan() {
-  isScanning.value = true
-  scanProgress.value = 0
-  scanStage.value = 1 // 设置初始阶段为"准备中"
-  scanStartTime.value = Date.now()
-  scanLogs.value = []
-  lastScanResult.value = null
-  
-  // 重置统计信息
-  pagesFound.value = 0
-  pagesScanned.value = 0
-  formsScanned.value = 0
-  jsFilesScanned.value = 0
-  
-  // 添加初始日志
-  addScanLog('开始扫描：' + scanForm.url, 'info')
-  
-  // 转换扫描选项为后端需要的modules格式
-  const selectedModules = []
-  if (scanForm.options.xss) selectedModules.push('xss')
-  if (scanForm.options.sqlInjection) selectedModules.push('sql_injection')
-  if (scanForm.options.csrf) selectedModules.push('csrf')
-  if (scanForm.options.fileInclusion) selectedModules.push('file_inclusion')
-  if (scanForm.options.directoryTraversal) selectedModules.push('directory_traversal')
-  if (scanForm.options.ssrf) selectedModules.push('ssrf')
-  
-  // 保存当前URL到历史记录
-  if (!recentlyScannedUrls.value.includes(scanForm.url)) {
-    recentlyScannedUrls.value.unshift(scanForm.url)
-    if (recentlyScannedUrls.value.length > 5) {
-      recentlyScannedUrls.value.pop()
-    }
-  }
-  
-  // 创建API请求数据
-  const scanData = {
-    url: scanForm.url,
-    modules: selectedModules,
-    depth: scanForm.depth,
-    headers: {} // 可根据需要添加自定义头信息
-  }
-  
-  addScanLog(`已选择 ${selectedModules.length} 种扫描类型，扫描深度：${scanForm.depth}`, 'info')
-  
-  // 由于这是模拟过程，我们使用setTimeout来模拟API调用
-  setTimeout(() => {
-    // 模拟后端返回的扫描ID
-    const scanId = `SCN-${Date.now()}`
-    addScanLog(`扫描任务已创建，ID: ${scanId}`, 'info')
+async function startScan() {
+  try {
+    isScanning.value = true
+    scanStartTime.value = Date.now()
+    scanProgress.value = 0
+    scanStage.value = 1
+    pagesFound.value = 0
+    formsScanned.value = 0
+    scanLogs.value = []
     
-    // 设置轮询获取扫描状态
+    // 记录开始日志
+    addScanLog('开始扫描: ' + scanForm.url, 'info')
+    
+    // 将URL添加到最近扫描历史
+    addToRecentUrls(scanForm.url)
+    
+    // 获取启用的模块
+    const enabledModules = []
+    for (const [key, value] of Object.entries(scanForm.options)) {
+      if (value) {
+        enabledModules.push(key)
+      }
+    }
+    
+    // 创建扫描任务
+    const scanId = await scanStore.createScan(scanForm.url, enabledModules)
+    
+    // 触发scan-started事件
+    emit('scan-started', { 
+      scanId, 
+      url: scanForm.url,
+      modules: enabledModules 
+    })
+    
+    // 模拟扫描过程
     simulateScanProcess(scanId)
-  }, 800)
-  
-  // 在实际项目中，请使用真实的API调用
-  /*
-  scanApi.startScan(scanData)
-    .then(response => {
-      const scanId = response.scan_id
-      addScanLog(`扫描任务已创建，ID: ${scanId}`, 'info')
-      
-      // 设置轮询获取扫描状态
-      pollScanStatus(scanId)
-    })
-    .catch(error => {
-      console.error('启动扫描失败:', error)
-      addScanLog(`启动扫描失败: ${error.message || '未知错误'}`, 'error')
-      isScanning.value = false
-      ElMessage.error('启动扫描失败')
-    })
-  */
+  } catch (error) {
+    console.error('启动扫描失败:', error)
+    ElMessage.error('启动扫描失败: ' + (error.message || '未知错误'))
+    isScanning.value = false
+  }
 }
 
 // 模拟扫描进度的函数
@@ -795,6 +771,18 @@ function addScanLog(message, type = 'info') {
   // 保持日志不会太长
   if (scanLogs.value.length > 50) {
     scanLogs.value.shift()
+  }
+}
+
+// 添加URL到最近扫描历史
+function addToRecentUrls(url) {
+  if (!recentlyScannedUrls.value.includes(url)) {
+    recentlyScannedUrls.value.unshift(url)
+    if (recentlyScannedUrls.value.length > 5) {
+      recentlyScannedUrls.value.pop()
+    }
+    // 保存到localStorage
+    localStorage.setItem('recentScannedUrls', JSON.stringify(recentlyScannedUrls.value))
   }
 }
 
